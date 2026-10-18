@@ -1,57 +1,44 @@
--- HydroCoop movement probe v0.4: read-only, manual 10-second capture
--- Ctrl+Alt+F8 starts ten samples; no player hooks or writes.
-local PREFIX = '[HydroneerMPProbe v0.4] '
-local function log(s) print(PREFIX .. tostring(s) .. '\n') end
-local function valid(obj)
-    if obj == nil then return false end
-    local ok, yes = pcall(function() return obj:IsValid() end)
-    return ok and yes == true
+-- HydroCoop v0.5: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.5] '
+local function log(s) print(tag..tostring(s)..'\n') end
+local path='Mods/HydroneerMPProbe/local_state.txt'
+local count=0
+local errors=0
+local function valid(v)
+  if v==nil then return false end
+  local ok,result=pcall(function() return v:IsValid() end)
+  return ok and result==true
 end
-local active = false
-local function sample(n)
-    local ok, why = pcall(function()
-        local controllers = FindAllOf('BP_GameController_C')
-        if not controllers then log('SAMPLE '..n..' no controllers'); return end
-        log('SAMPLE '..n..' controller_count='..tostring(#controllers))
-        for i, c in ipairs(controllers) do
-            if i > 2 then break end
-            if valid(c) then
-                local pawn = c.Pawn
-                if valid(pawn) then
-                    local pos = pawn:K2_GetActorLocation()
-                    local rot = pawn:K2_GetActorRotation()
-                    if pos and rot then
-                        log(string.format('PLAYER %d X=%.3f Y=%.3f Z=%.3f Pitch=%.3f Yaw=%.3f Roll=%.3f',
-                          i,pos.X,pos.Y,pos.Z,rot.Pitch,rot.Yaw,rot.Roll))
-                    else log('PLAYER '..i..' transform unavailable') end
-                else log('PLAYER '..i..' pawn invalid') end
-            end
+local function capture()
+  local controllers=FindAllOf('BP_GameController_C')
+  if not controllers then return end
+  for _,c in ipairs(controllers) do
+    if valid(c) then
+      local pawn=c.Pawn
+      if valid(pawn) then
+        local p=pawn:K2_GetActorLocation()
+        local r=pawn:K2_GetActorRotation()
+        if p and r then
+          local f,err=io.open(path,'w')
+          if not f then error(tostring(err)) end
+          f:write(string.format('HC1|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f\n',p.X,p.Y,p.Z,r.Pitch,r.Yaw,r.Roll))
+          f:close()
+          count=count+1
+          if count%40==0 then log('Published '..count..' samples') end
+          return
         end
-    end)
-    if not ok then log('SAMPLE '..n..' ERROR: '..tostring(why)) end
+      end
+    end
+  end
 end
-log('Loaded. No hooks, no property writes. In-world Ctrl+Alt+F8: 10 second capture. Stay in world while capturing.')
-RegisterKeyBind(Key.F8, {ModifierKey.CONTROL, ModifierKey.ALT}, function()
-    if active then log('Capture already active'); return end
-    active = true
-    log('CAPTURE START 10 samples; do not change levels or return to menu')
-    local n = 0
-    LoopAsync(1000, function()
-        n = n + 1
-        local ok, err = pcall(function()
-            ExecuteInGameThread(function()
-                sample(n)
-                if n == 10 then
-                    active = false
-                    log('CAPTURE FINISHED')
-                end
-            end)
-        end)
-        if not ok then
-            active = false
-            log('Scheduling failed: '..tostring(err))
-            return true
-        end
-        return n >= 10
-    end)
+log('Loaded, sampling player transform every 250ms. No gameplay hooks.')
+LoopAsync(250,function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(capture)
+    if not ok then
+      errors=errors+1
+      if errors<=5 then log('ERROR '..tostring(err)) end
+    end
+  end)
+  return false
 end)
