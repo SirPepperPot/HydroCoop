@@ -22,11 +22,11 @@ try {
   if (Test-Path $target) { Copy-Item $target "$target.bak" -Force }
   Copy-Item $lua $target -Force
   $installed = Get-Content -LiteralPath $target -Raw
-  if ($installed -notmatch 'HydroCoop v0\.8' -or $installed -notmatch 'Key\.F10') { throw 'Installed mod is not v0.8: ghost hotkey missing.' }
+  if ($installed -notmatch 'HydroCoop v0\.8' -or $installed -notmatch 'Key\.F12') { throw 'Installed mod is not v0.9: ghost hotkey missing.' }
   Copy-Item $relay (Join-Path $game 'HydroCoop-Relay.ps1') -Force
   Copy-Item $solo (Join-Path $game 'Test-HydroCoop-Local.ps1') -Force
   New-Item -Path (Join-Path $mod 'enabled.txt') -ItemType File -Force | Out-Null
-  Write-Host 'HydroCoop v0.8 installed and verified (ghost hotkey present). UE4SS stays installed.' -ForegroundColor Green
+  Write-Host 'HydroCoop v0.9 installed and verified (ghost movement hotkey present). UE4SS stays installed.' -ForegroundColor Green
   Write-Host 'Experimental ghost: Ctrl+Alt+F10 to try spawning; Ctrl+Alt+F11 to remove. Disposable world ONLY.'
   Write-Host 'Solo test: powershell -ExecutionPolicy Bypass -File .\Test-HydroCoop-Local.ps1'
   Write-Host 'Host: powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Host'
