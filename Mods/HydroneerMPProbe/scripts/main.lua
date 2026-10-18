@@ -1,5 +1,5 @@
--- HydroCoop v0.9: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.9] '
+-- HydroCoop v0.10: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.10] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -139,43 +139,72 @@ local function readRemoteTransform()
   end
   return {X=t[2],Y=t[3],Z=t[4]},{Pitch=t[5],Yaw=t[6],Roll=t[7]}
 end
+-- v0.10: interpolate toward received transform at 20 Hz; 20-second manual test.
+local targetPos=nil
+local targetRot=nil
+local moveSteps=0
+local function lerpAngle(a,b,alpha)
+  local d=(b-a+180)%360-180
+  return a+d*alpha
+end
 RegisterKeyBind(Key.F12,{ModifierKey.CONTROL,ModifierKey.ALT},function()
   ExecuteInGameThread(function()
     if not valid(ghost) then log('GHOST MOVE: Spawn ghost first (Ctrl+Alt+F10)');return end
     if movementEnabled then movementEnabled=false;log('GHOST MOVE OFF');return end
-    moveTicks=0;moveErrors=0;movementEnabled=true
-    log('GHOST MOVE ON: 20 seconds, received data only; Ctrl+Alt+F12 disables.')
+    moveTicks=0;moveSteps=0;moveErrors=0;targetPos=nil;targetRot=nil
+    movementEnabled=true
+    log('GHOST SMOOTH MOVE ON: 20 seconds; Ctrl+Alt+F12 disables.')
   end)
 end)
-LoopAsync(250,function()
+LoopAsync(50,function()
   if movementEnabled then
     ExecuteInGameThread(function()
       if not movementEnabled then return end
       if not valid(ghost) then movementEnabled=false;log('GHOST MOVE STOP: ghost invalid');return end
-      moveTicks=moveTicks+1
-      if moveTicks>80 then movementEnabled=false;log('GHOST MOVE STOP: 20-second limit');return end
+      moveSteps=moveSteps+1
+      if moveSteps>400 then movementEnabled=false;log('GHOST MOVE STOP: 20-second limit');return end
       local ok,err=pcall(function()
-        local p,r=readRemoteTransform()
-        if not p then
-          if moveTicks%20==1 then log('GHOST MOVE: remote data unavailable/invalid') end
+        if moveSteps%5==1 then
+          local p,r=readRemoteTransform()
+          if p then targetPos=p;targetRot=r end
+        end
+        if not targetPos then
+          if moveSteps%100==1 then log('GHOST MOVE: awaiting remote data') end
           return
         end
-        -- K2_SetActorLocation only targets the ghost owned by this mod.
-        ghost:K2_SetActorLocation(p,false,{},true)
-        ghost:K2_SetActorRotation(r,true)
-        if moveTicks%20==0 then
+        local p=ghost:K2_GetActorLocation()
+        local r=ghost:K2_GetActorRotation()
+        if not p or not r then return end
+        local dx=targetPos.X-p.X
+        local dy=targetPos.Y-p.Y
+        local dz=targetPos.Z-p.Z
+        local distance=math.sqrt(dx*dx+dy*dy+dz*dz)
+        -- Never snap to a remote target. Cap each 50ms step to a plausible walking speed.
+        local alpha=0.22
+        local maxStep=25
+        local factor=alpha
+        if distance*factor>maxStep then factor=maxStep/distance end
+        local nextPos={X=p.X+dx*factor,Y=p.Y+dy*factor,Z=p.Z+dz*factor}
+        local nextRot={
+          Pitch=lerpAngle(r.Pitch,targetRot.Pitch,alpha),
+          Yaw=lerpAngle(r.Yaw,targetRot.Yaw,alpha),
+          Roll=lerpAngle(r.Roll,targetRot.Roll,alpha)
+        }
+        ghost:K2_SetActorLocation(nextPos,false,{},true)
+        ghost:K2_SetActorRotation(nextRot,true)
+        if moveSteps%100==0 then
           local actual=ghost:K2_GetActorLocation()
-          log(string.format('GHOST MOVE tick=%d target=%.1f,%.1f,%.1f actual=%.1f,%.1f,%.1f',
-            moveTicks,p.X,p.Y,p.Z,actual.X,actual.Y,actual.Z))
+          log(string.format('GHOST SMOOTH tick=%d remaining=%.1f actual=%.1f,%.1f,%.1f',
+            moveSteps,distance,actual.X,actual.Y,actual.Z))
         end
       end)
       if not ok then
         moveErrors=moveErrors+1
-        if moveErrors<=3 then log('GHOST MOVE ERROR: '..tostring(err)) end
+        if moveErrors<=3 then log('GHOST SMOOTH ERROR: '..tostring(err)) end
         if moveErrors>=3 then movementEnabled=false;log('GHOST MOVE DISABLED after 3 errors') end
       end
     end)
   end
   return false
 end)
-log('v0.9 Ctrl+Alt+F12 toggles 20-second movement of ghost from remote_state.txt.')
+log('v0.10 Ctrl+Alt+F12 smooth 20-second ghost movement from remote_state.txt.')
