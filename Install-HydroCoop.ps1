@@ -12,17 +12,20 @@ try {
   $lua=Join-Path $work 'main.lua'
   $relay=Join-Path $work 'HydroCoop-Relay.ps1'
   $solo=Join-Path $work 'Test-HydroCoop-Local.ps1'
-  Invoke-WebRequest -Uri "$base/Mods/HydroneerMPProbe/scripts/main.lua" -OutFile $lua -UseBasicParsing
-  Invoke-WebRequest -Uri "$base/HydroCoop-Relay.ps1" -OutFile $relay -UseBasicParsing
-  Invoke-WebRequest -Uri "$base/Test-HydroCoop-Local.ps1" -OutFile $solo -UseBasicParsing
+  $cacheBust=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  Invoke-WebRequest -Uri "$base/Mods/HydroneerMPProbe/scripts/main.lua?v=$cacheBust" -OutFile $lua -UseBasicParsing
+  Invoke-WebRequest -Uri "$base/HydroCoop-Relay.ps1?v=$cacheBust" -OutFile $relay -UseBasicParsing
+  Invoke-WebRequest -Uri "$base/Test-HydroCoop-Local.ps1?v=$cacheBust" -OutFile $solo -UseBasicParsing
   if ((Get-Item $lua).Length -lt 100 -or (Get-Item $relay).Length -lt 100) { throw 'Download incomplete.' }
+  $downloaded = Get-Content -LiteralPath $lua -Raw
+  if ($downloaded -notmatch 'HydroCoop v0\.10' -or $downloaded -notmatch 'Key\.F12') { throw 'Downloaded Lua is not v0.10 or lacks movement hotkey. Existing installation unchanged.' }
   $scripts=Join-Path $mod 'scripts'
   New-Item -ItemType Directory -Force -Path $scripts | Out-Null
   $target=Join-Path $scripts 'main.lua'
   if (Test-Path $target) { Copy-Item $target "$target.bak" -Force }
   Copy-Item $lua $target -Force
   $installed = Get-Content -LiteralPath $target -Raw
-  if ($installed -notmatch 'HydroCoop v0\.9' -or $installed -notmatch 'Key\.F12') { throw 'Installed mod is not v0.10: ghost movement hotkey missing.' }
+  if ($installed -notmatch 'HydroCoop v0\.10' -or $installed -notmatch 'Key\.F12') { throw 'Installed mod is not v0.10: ghost movement hotkey missing.' }
   Copy-Item $relay (Join-Path $game 'HydroCoop-Relay.ps1') -Force
   Copy-Item $solo (Join-Path $game 'Test-HydroCoop-Local.ps1') -Force
   New-Item -Path (Join-Path $mod 'enabled.txt') -ItemType File -Force | Out-Null
