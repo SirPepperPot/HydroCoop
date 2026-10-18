@@ -1,3 +1,16 @@
+## v0.8 — Experimental ghost character spawn (opt-in)
+
+This is a first **actor creation experiment**, not yet online multiplayer. Use a **disposable single-player world only**; game-specific character initialization may behave unexpectedly.
+
+1. Exit Hydroneer and run the usual GitHub installer.
+2. Launch a disposable single-player world.
+3. Press **Ctrl+Alt+F10** once to spawn a non-possessed HydroGuy actor near you (offset 250 X and Y, 50 Z).
+4. If you see the actor or any game behavior changes, record what happened.
+5. Press **Ctrl+Alt+F11** to remove only the actor this mod spawned.
+6. Exit the game and send UE4SS.log.
+
+This experimental feature has **no automatic spawning, remote movement, or networking control**. Do not use it in saves you care about. If you encounter an issue, exit the game, restore your disposable save and run the prior known working version from GitHub history.
+
 ## v0.7 — Incoming movement bridge
 
 After updating with the standard installer, launch a disposable single-player world, run the localhost test, then press **Ctrl+Alt+F9** in Hydroneer. The UE4SS log should contain **REMOTE BRIDGE OK** and the simulated coordinates from `remote_state.txt`. This only parses incoming data; it does not spawn or move characters. Network and game-to-game multiplayer remain unverified.
