@@ -1,5 +1,5 @@
-# HydroCoop v0.6 solo loopback simulation; no game writes.
-param([int]$Seconds=15)
+# HydroCoop v0.9 solo loopback simulation; no game writes.
+param([int]$Seconds=30)
 $ErrorActionPreference='Stop'
 $game='E:\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64'
 $folder=Join-Path $game 'Mods\HydroneerMPProbe'
@@ -18,12 +18,25 @@ try {
    $ms=$sw.Elapsed.TotalMilliseconds
    if ($ms -ge $next) {
      $next=$ms+250
-     # Use current game position when available, or a safe synthetic movement sample.
+     # Orbit close to the real player, so the ghost stays visible.
+     $originX=20000.0; $originY=5000.0; $originZ=450.0
+     if (Test-Path $local) {
+       try {
+         $parts=([System.IO.File]::ReadAllText($local).Trim()).Split('|')
+         if ($parts.Length -eq 7 -and $parts[0] -eq 'HC1') {
+           $ci=[System.Globalization.CultureInfo]::InvariantCulture
+           $originX=[double]::Parse($parts[1],$ci)
+           $originY=[double]::Parse($parts[2],$ci)
+           $originZ=[double]::Parse($parts[3],$ci)
+         }
+       } catch { }
+     }
      $phase=$ms/1000.0
-     $x=20000+[Math]::Sin($phase)*250
-     $y=5000+[Math]::Cos($phase)*250
+     $x=$originX+300+[Math]::Sin($phase)*150
+     $y=$originY+300+[Math]::Cos($phase)*150
+     $z=$originZ+20
      $yaw=($phase*30)%360
-     $data=[string]::Format([System.Globalization.CultureInfo]::InvariantCulture,'HC1|{0:F3}|{1:F3}|450.000|0.000|{2:F3}|0.000',$x,$y,$yaw)
+     $data=[string]::Format([System.Globalization.CultureInfo]::InvariantCulture,'HC1|{0:F3}|{1:F3}|{2:F3}|0.000|{3:F3}|0.000',$x,$y,$z,$yaw)
      $bytes=[System.Text.Encoding]::ASCII.GetBytes($data)
      [void]$tx.Send($bytes,$bytes.Length,$destination)
      $sent++
