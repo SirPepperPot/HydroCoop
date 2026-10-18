@@ -1,5 +1,5 @@
--- HydroCoop v0.10: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.10] '
+-- HydroCoop v0.11: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.11] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -208,3 +208,76 @@ LoopAsync(50,function()
   return false
 end)
 log('v0.10 Ctrl+Alt+F12 smooth 20-second ghost movement from remote_state.txt.')
+
+-- v0.11 read-only nearby actor discovery, manual Ctrl+Alt+F8.
+-- No interaction hooks, actor mutations, or item replication yet.
+local scanNumber=0
+local previousNearby=nil
+local function scanNearby()
+  local controllers=FindAllOf('BP_GameController_C')
+  local player=nil
+  if controllers then
+    for _,c in ipairs(controllers) do
+      if valid(c) and valid(c.Pawn) then player=c.Pawn;break end
+    end
+  end
+  if not player then log('SCAN: player not ready');return end
+  local here=player:K2_GetActorLocation()
+  local actors=FindAllOf('Actor')
+  if not actors then log('SCAN: FindAllOf Actor returned nil');return end
+  scanNumber=scanNumber+1
+  local nearby={}
+  local kinds={}
+  local found=0
+  local exceptions=0
+  for _,a in ipairs(actors) do
+    if valid(a) and a~=player and a~=ghost then
+      local ok,p=pcall(function() return a:K2_GetActorLocation() end)
+      if ok and p and p.X and p.Y and p.Z then
+        local dx=p.X-here.X
+        local dy=p.Y-here.Y
+        local dz=p.Z-here.Z
+        if dx*dx+dy*dy+dz*dz<=900*900 then
+          local good,name=pcall(function() return a:GetFullName() end)
+          if good and name then
+            found=found+1
+            local cls=name:match('^([^ ]+)') or 'Unknown'
+            kinds[cls]=(kinds[cls] or 0)+1
+            nearby[name]=string.format('(%.0f,%.0f,%.0f)',p.X,p.Y,p.Z)
+          end
+        end
+      elseif not ok then exceptions=exceptions+1 end
+    end
+  end
+  local sorted={}
+  for name,n in pairs(kinds) do sorted[#sorted+1]={name=name,n=n} end
+  table.sort(sorted,function(a,b) if a.n==b.n then return a.name<b.name end return a.n>b.n end)
+  log(string.format('SCAN #%d within 900 units: %d actors, %d classes, %d unreadable',scanNumber,found,#sorted,exceptions))
+  for i=1,math.min(#sorted,35) do
+    log(string.format('SCAN CLASS %d %s count=%d',i,sorted[i].name,sorted[i].n))
+  end
+  if previousNearby then
+    local added,removed=0,0
+    for name,pos in pairs(nearby) do
+      if not previousNearby[name] then
+        added=added+1
+        if added<=15 then log('SCAN NEW '..name..' '..pos) end
+      end
+    end
+    for name,_ in pairs(previousNearby) do
+      if not nearby[name] then
+        removed=removed+1
+        if removed<=15 then log('SCAN GONE '..name) end
+      end
+    end
+    log(string.format('SCAN DELTA new=%d gone=%d (may include range transitions)',added,removed))
+  end
+  previousNearby=nearby
+end
+RegisterKeyBind(Key.F8,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(scanNearby)
+    if not ok then log('SCAN ERROR '..tostring(err)) end
+  end)
+end)
+log('v0.11 Ctrl+Alt+F8 scans nearby actor types; press before and after picking up/dropping an object.')
