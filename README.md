@@ -1,3 +1,14 @@
+## v0.9 — simulated player moves a visible ghost (experimental)
+
+Use a disposable single-player world only. After updating with the usual GitHub installer and launching Hydroneer:
+
+1. Press **Ctrl+Alt+F10** to spawn a ghost HydroGuy (manual; no automatic spawning).
+2. Run `powershell -ExecutionPolicy Bypass -File .\Test-HydroCoop-Local.ps1` from the game Win64 folder. This simulates movement for **30 seconds** near your actual location.
+3. While the simulation runs, press **Ctrl+Alt+F12** to enable up to **20 seconds** of ghost movement from `remote_state.txt`. Press again to stop.
+4. Press **Ctrl+Alt+F11** to remove the ghost. Exit and provide `UE4SS.log` along with what you saw.
+
+This is an **untested actor movement experiment**, not functional online multiplayer. It only moves the ghost created by this mod. If actor movement errors repeat three times, the feature turns itself off. If it misbehaves, exit without saving.
+
 ## v0.8 — Experimental ghost character spawn (opt-in)
 
 This is a first **actor creation experiment**, not yet online multiplayer. Use a **disposable single-player world only**; game-specific character initialization may behave unexpectedly.
