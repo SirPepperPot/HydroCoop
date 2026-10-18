@@ -20,14 +20,14 @@ try {
   if ((Get-Content -LiteralPath $relay -Raw) -notmatch 'bucketPattern') { throw 'Downloaded relay missing HC2 support. Existing installation unchanged.' }
   # Verify the downloaded payload *before* overwriting the existing mod.
   $downloaded = Get-Content -LiteralPath $lua -Raw
-  if ($downloaded -notmatch 'HydroCoop v0\.12' -or $downloaded -notmatch 'Key\.F6') { throw 'Downloaded Lua is not v0.13 or lacks scan hotkey. Existing installation unchanged.' }
+  if ($downloaded -notmatch 'HydroCoop v0\.13' -or $downloaded -notmatch 'Key\.F6') { throw 'Downloaded Lua is not v0.13 or lacks scan hotkey. Existing installation unchanged.' }
   $scripts=Join-Path $mod 'scripts'
   New-Item -ItemType Directory -Force -Path $scripts | Out-Null
   $target=Join-Path $scripts 'main.lua'
   if (Test-Path $target) { Copy-Item $target "$target.bak" -Force }
   Copy-Item $lua $target -Force
   $installed = Get-Content -LiteralPath $target -Raw
-  if ($installed -notmatch 'HydroCoop v0\.12' -or $installed -notmatch 'Key\.F6') { throw 'Installed mod is not v0.13: bucket event hotkey missing.' }
+  if ($installed -notmatch 'HydroCoop v0\.13' -or $installed -notmatch 'Key\.F6') { throw 'Installed mod is not v0.13: bucket event hotkey missing.' }
   Copy-Item $relay (Join-Path $game 'HydroCoop-Relay.ps1') -Force
   Copy-Item $solo (Join-Path $game 'Test-HydroCoop-Local.ps1') -Force
   New-Item -Path (Join-Path $mod 'enabled.txt') -ItemType File -Force | Out-Null
