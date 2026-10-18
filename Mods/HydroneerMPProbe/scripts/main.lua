@@ -1,5 +1,5 @@
--- HydroCoop v0.8: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.8] '
+-- HydroCoop v0.9: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.9] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -103,6 +103,7 @@ local function removeGhost()
   if not ghost or not valid(ghost) then log('GHOST nothing to remove');ghost=nil;return end
   ghost:K2_DestroyActor()
   ghost=nil
+  movementEnabled=false
   log('GHOST removed')
 end
 RegisterKeyBind(Key.F10,{ModifierKey.CONTROL,ModifierKey.ALT},function()
@@ -118,3 +119,63 @@ RegisterKeyBind(Key.F11,{ModifierKey.CONTROL,ModifierKey.ALT},function()
   end)
 end)
 log('v0.8 optional ghost spawn Ctrl+Alt+F10; remove Ctrl+Alt+F11. USE DISPOSABLE WORLD ONLY.')
+
+-- v0.9: manually enable 20 seconds of ghost-only movement from received file.
+-- Ctrl+Alt+F12, after spawning. Never touches the controlled player.
+local movementEnabled=false
+local moveTicks=0
+local moveErrors=0
+local function readRemoteTransform()
+  local f=io.open(remotePath,'r')
+  if not f then return nil end
+  local line=f:read('*l');f:close()
+  if not line then return nil end
+  local t={}
+  for v in string.gmatch(line,'[^|]+') do t[#t+1]=v end
+  if #t~=7 or t[1]~='HC1' then return nil end
+  for i=2,7 do
+    t[i]=tonumber(t[i])
+    if not t[i] or t[i]~=t[i] or math.abs(t[i])>1e7 then return nil end
+  end
+  return {X=t[2],Y=t[3],Z=t[4]},{Pitch=t[5],Yaw=t[6],Roll=t[7]}
+end
+RegisterKeyBind(Key.F12,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    if not valid(ghost) then log('GHOST MOVE: Spawn ghost first (Ctrl+Alt+F10)');return end
+    if movementEnabled then movementEnabled=false;log('GHOST MOVE OFF');return end
+    moveTicks=0;moveErrors=0;movementEnabled=true
+    log('GHOST MOVE ON: 20 seconds, received data only; Ctrl+Alt+F12 disables.')
+  end)
+end)
+LoopAsync(250,function()
+  if movementEnabled then
+    ExecuteInGameThread(function()
+      if not movementEnabled then return end
+      if not valid(ghost) then movementEnabled=false;log('GHOST MOVE STOP: ghost invalid');return end
+      moveTicks=moveTicks+1
+      if moveTicks>80 then movementEnabled=false;log('GHOST MOVE STOP: 20-second limit');return end
+      local ok,err=pcall(function()
+        local p,r=readRemoteTransform()
+        if not p then
+          if moveTicks%20==1 then log('GHOST MOVE: remote data unavailable/invalid') end
+          return
+        end
+        -- K2_SetActorLocation only targets the ghost owned by this mod.
+        ghost:K2_SetActorLocation(p,false,{},true)
+        ghost:K2_SetActorRotation(r,true)
+        if moveTicks%20==0 then
+          local actual=ghost:K2_GetActorLocation()
+          log(string.format('GHOST MOVE tick=%d target=%.1f,%.1f,%.1f actual=%.1f,%.1f,%.1f',
+            moveTicks,p.X,p.Y,p.Z,actual.X,actual.Y,actual.Z))
+        end
+      end)
+      if not ok then
+        moveErrors=moveErrors+1
+        if moveErrors<=3 then log('GHOST MOVE ERROR: '..tostring(err)) end
+        if moveErrors>=3 then movementEnabled=false;log('GHOST MOVE DISABLED after 3 errors') end
+      end
+    end)
+  end
+  return false
+end)
+log('v0.9 Ctrl+Alt+F12 toggles 20-second movement of ghost from remote_state.txt.')
