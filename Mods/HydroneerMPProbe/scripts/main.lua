@@ -1,5 +1,5 @@
--- HydroCoop v0.11: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.11] '
+-- HydroCoop v0.12: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.12] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -281,3 +281,63 @@ RegisterKeyBind(Key.F8,{ModifierKey.CONTROL,ModifierKey.ALT},function()
   end)
 end)
 log('v0.11 Ctrl+Alt+F8 scans nearby actor types; press before and after picking up/dropping an object.')
+
+-- v0.12: bucket identity/transform tracker across the entire loaded world.
+-- Use Ctrl+Alt+F7 before, during and after holding/dropping the same bucket.
+-- This is a read-only census (no hooks, no writes).
+local lastBucketScan=nil
+local function inspectBuckets()
+  local all=FindAllOf('BP_Bucket_C') or {}
+  local current={}
+  local n=0
+  for _,a in ipairs(all) do
+    if valid(a) then
+      local ok,data=pcall(function()
+        local name=a:GetFullName()
+        local p=a:K2_GetActorLocation()
+        if not p then return nil end
+        local root=a.RootComponent
+        local attached='unknown'
+        if valid(root) then
+          local parent=root.AttachParent
+          if valid(parent) then attached=tostring(parent:GetFullName()) else attached='none' end
+        end
+        return {name=name,pos={X=p.X,Y=p.Y,Z=p.Z},parent=attached}
+      end)
+      if ok and data then current[data.name]=data;n=n+1 end
+    end
+  end
+  log('BUCKET GLOBAL total='..n)
+  local names={}
+  for name,_ in pairs(current) do names[#names+1]=name end
+  table.sort(names)
+  for i,name in ipairs(names) do
+    if i>30 then log('BUCKET output limited to 30 actors');break end
+    local b=current[name]
+    local prior=lastBucketScan and lastBucketScan[name]
+    local label=prior and 'EXISTING' or 'PRESENT'
+    if lastBucketScan and not prior then label='NEW' end
+    local dist='-'
+    if prior then
+      local dx=b.pos.X-prior.pos.X
+      local dy=b.pos.Y-prior.pos.Y
+      local dz=b.pos.Z-prior.pos.Z
+      dist=string.format('%.1f',math.sqrt(dx*dx+dy*dy+dz*dz))
+    end
+    log(string.format('BUCKET %s %s xyz=%.1f,%.1f,%.1f moved=%s attachedTo=%s',
+      label,name,b.pos.X,b.pos.Y,b.pos.Z,dist,b.parent))
+  end
+  if lastBucketScan then
+    for name,_ in pairs(lastBucketScan) do
+      if not current[name] then log('BUCKET MISSING '..name..' (destroyed/unloaded/invalid)') end
+    end
+  end
+  lastBucketScan=current
+end
+RegisterKeyBind(Key.F7,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(inspectBuckets)
+    if not ok then log('BUCKET SCAN ERROR '..tostring(err)) end
+  end)
+end)
+log('v0.12 Ctrl+Alt+F7 globally tracks bucket actors, positions and attachment.')
