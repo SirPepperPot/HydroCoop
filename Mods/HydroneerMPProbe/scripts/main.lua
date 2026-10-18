@@ -1,5 +1,5 @@
--- HydroCoop v0.14: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.14] '
+-- HydroCoop v0.15: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.15] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -491,3 +491,84 @@ RegisterKeyBind(Key.F5,{ModifierKey.CONTROL,ModifierKey.ALT},function()
   if not ok then log('REMOTE BUCKET ERROR '..tostring(err)) end
 end)
 log('v0.14 Ctrl+Alt+F5 validates latest incoming HC2 bucket packet (read-only).')
+
+-- v0.15 opt-in live peer ghost. Never uses split-screen.
+-- Ctrl+Alt+F4 toggles. Requires fresh relay heartbeat, not simulator files.
+local liveEnabled=false
+local liveCreatedGhost=false
+local liveTicks=0
+local peerStatePath='Mods/HydroneerMPProbe/peer_state.txt'
+local liveLastError=0
+local function peerFresh()
+  local f=io.open(peerStatePath,'r')
+  if not f then return false end
+  local data=f:read('*l')
+  f:close()
+  local time=data and data:match('^ONLINE|(%d+)$')
+  local now=os.time()
+  return time and tonumber(time) and tonumber(time)<=now+2 and now-tonumber(time)<=3
+end
+local function toggleLive()
+  liveEnabled=not liveEnabled
+  liveTicks=0
+  if not liveEnabled then
+    movementEnabled=false
+    if liveCreatedGhost and valid(ghost) then
+      ghost:K2_DestroyActor()
+      ghost=nil
+    end
+    liveCreatedGhost=false
+    log('LIVE PEER OFF')
+  else
+    log('LIVE PEER ON: waiting for real relay packets; ghost auto-spawns when connected.')
+  end
+end
+RegisterKeyBind(Key.F4,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(toggleLive)
+    if not ok then log('LIVE TOGGLE ERROR '..tostring(err)) end
+  end)
+end)
+LoopAsync(50,function()
+  if liveEnabled then
+    ExecuteInGameThread(function()
+      if not liveEnabled then return end
+      local ok,err=pcall(function()
+        liveTicks=liveTicks+1
+        if not peerFresh() then
+          if liveTicks%100==1 then log('LIVE PEER: waiting for fresh network data') end
+          return
+        end
+        if not valid(ghost) then
+          spawnGhost()
+          liveCreatedGhost=valid(ghost)
+        end
+        if not valid(ghost) then return end
+        local dest,rot=readRemoteTransform()
+        if not dest or not rot then return end
+        local p=ghost:K2_GetActorLocation()
+        local r=ghost:K2_GetActorRotation()
+        if not p or not r then return end
+        local dx=dest.X-p.X
+        local dy=dest.Y-p.Y
+        local dz=dest.Z-p.Z
+        local d=math.sqrt(dx*dx+dy*dy+dz*dz)
+        local step=math.min(1,0.28)
+        if d>2000 then step=1
+        elseif d*step>40 then step=40/d end
+        ghost:K2_SetActorLocation({X=p.X+dx*step,Y=p.Y+dy*step,Z=p.Z+dz*step},false,{},true)
+        ghost:K2_SetActorRotation({Pitch=lerpAngle(r.Pitch,rot.Pitch,0.3),Yaw=lerpAngle(r.Yaw,rot.Yaw,0.3),Roll=lerpAngle(r.Roll,rot.Roll,0.3)},true)
+        if liveTicks%100==0 then
+          log(string.format('LIVE PEER MOVE distance=%.1f target=%.1f,%.1f,%.1f',d,dest.X,dest.Y,dest.Z))
+        end
+      end)
+      if not ok then
+        liveLastError=liveLastError+1
+        if liveLastError<=3 then log('LIVE PEER ERROR '..tostring(err)) end
+        if liveLastError>=3 then liveEnabled=false;log('LIVE PEER DISABLED after errors') end
+      end
+    end)
+  end
+  return false
+end)
+log('v0.15 Ctrl+Alt+F4 toggles automatic live peer ghost (relay-connected peers only).')
