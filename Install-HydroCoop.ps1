@@ -1,9 +1,9 @@
 # HydroCoop latest installer: UE4SS required, Hydroneer must be closed.
 $ErrorActionPreference='Stop'
 $base='https://raw.githubusercontent.com/SirPepperPot/HydroCoop/8f01ef9a50930c34305349e067aded1460e33108'
-$game='E:\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64'
+$game=(Get-Location).Path
 $mod=Join-Path $game 'Mods\HydroneerMPProbe'
-if (!(Test-Path (Join-Path $game 'Mining-Win64-Shipping.exe'))) { throw "Hydroneer not found: $game" }
+if (!(Test-Path (Join-Path $game 'Mining-Win64-Shipping.exe'))) { throw "Open PowerShell in your Hydroneer Mining\Binaries\Win64 folder before running installer. Current folder: $game" }
 if (!(Test-Path (Join-Path $game 'Mods'))) { throw 'UE4SS Mods folder missing.' }
 if (Get-Process -Name 'Mining-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close Hydroneer before updating.' }
 $work=Join-Path $env:TEMP ('HydroCoopUpdate-'+[guid]::NewGuid().ToString('N'))
@@ -39,7 +39,7 @@ try {
   Write-Host 'Solo test: powershell -ExecutionPolicy Bypass -File .\Test-HydroCoop-Local.ps1'
   Write-Host 'Host: powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Host'
   Write-Host 'Installed Lua:' $target
-  Write-Host 'Client: powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Client -HostIP HOST_TAILSCALE_IP'
+  Write-Host 'Client: powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Client -HostIP HOST_PUBLIC_IP'
 } finally {
   Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
