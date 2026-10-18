@@ -1,26 +1,30 @@
-# HydroCoop UE4SS installer. Run after closing Hydroneer.
-$ErrorActionPreference = 'Stop'
-$repo = 'https://raw.githubusercontent.com/SirPepperPot/HydroCoop/main'
-$root = 'E:\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64'
-$mods = Join-Path $root 'Mods'
-$dest = Join-Path $mods 'HydroneerMPProbe'
-$exe = Join-Path $root 'Mining-Win64-Shipping.exe'
-if (-not (Test-Path -LiteralPath $exe)) { throw "Hydroneer was not found at $root. Edit the root path in this script." }
-if (-not (Test-Path -LiteralPath $mods)) { throw "UE4SS Mods directory was not found at $mods" }
-if (Get-Process 'Mining-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close Hydroneer before updating.' }
-$source = "$repo/Mods/HydroneerMPProbe/scripts/main.lua"
-$temp = Join-Path $env:TEMP 'HydroCoop-main.lua'
+# HydroCoop latest installer: UE4SS required, Hydroneer must be closed.
+$ErrorActionPreference='Stop'
+$base='https://raw.githubusercontent.com/SirPepperPot/HydroCoop/main'
+$game='E:\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64'
+$mod=Join-Path $game 'Mods\HydroneerMPProbe'
+if (!(Test-Path (Join-Path $game 'Mining-Win64-Shipping.exe'))) { throw "Hydroneer not found: $game" }
+if (!(Test-Path (Join-Path $game 'Mods'))) { throw 'UE4SS Mods folder missing.' }
+if (Get-Process -Name 'Mining-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close Hydroneer before updating.' }
+$work=Join-Path $env:TEMP ('HydroCoopUpdate-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $work | Out-Null
 try {
-    Invoke-WebRequest -Uri $source -OutFile $temp -UseBasicParsing
-    if ((Get-Item $temp).Length -lt 100) { throw 'Downloaded Lua file appears incomplete.' }
-    $targetScripts = Join-Path $dest 'scripts'
-    New-Item -ItemType Directory -Force -Path $targetScripts | Out-Null
-    $target = Join-Path $targetScripts 'main.lua'
-    if (Test-Path -LiteralPath $target) {
-        Copy-Item -LiteralPath $target -Destination "$target.bak" -Force
-    }
-    Copy-Item -LiteralPath $temp -Destination $target -Force
-    New-Item -ItemType File -Force -Path (Join-Path $dest 'enabled.txt') | Out-Null
-    Write-Host "HydroCoop installed and enabled: $target" -ForegroundColor Green
-    Write-Host "Expected version: v0.4 read-only probe. Restart Hydroneer and press Ctrl+Alt+F8."
-} finally { Remove-Item -LiteralPath $temp -ErrorAction SilentlyContinue }
+  $lua=Join-Path $work 'main.lua'
+  $relay=Join-Path $work 'HydroCoop-Relay.ps1'
+  Invoke-WebRequest -Uri "$base/Mods/HydroneerMPProbe/scripts/main.lua" -OutFile $lua -UseBasicParsing
+  Invoke-WebRequest -Uri "$base/HydroCoop-Relay.ps1" -OutFile $relay -UseBasicParsing
+  if ((Get-Item $lua).Length -lt 100 -or (Get-Item $relay).Length -lt 100) { throw 'Download incomplete.' }
+  $scripts=Join-Path $mod 'scripts'
+  New-Item -ItemType Directory -Force -Path $scripts | Out-Null
+  $target=Join-Path $scripts 'main.lua'
+  if (Test-Path $target) { Copy-Item $target "$target.bak" -Force }
+  Copy-Item $lua $target -Force
+  Copy-Item $relay (Join-Path $game 'HydroCoop-Relay.ps1') -Force
+  New-Item -Path (Join-Path $mod 'enabled.txt') -ItemType File -Force | Out-Null
+  Write-Host 'HydroCoop v0.5 installed successfully. UE4SS stays installed.' -ForegroundColor Green
+  Write-Host 'This build exchanges position data ONLY; it does not spawn a second player.'
+  Write-Host 'Host: powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Host'
+  Write-Host 'Client: powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Client -HostIP HOST_TAILSCALE_IP'
+} finally {
+  Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+}
