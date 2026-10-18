@@ -1,3 +1,9 @@
+## v0.11 — Gameplay actor discovery (read-only)
+
+Focus has shifted from player animation to shared gameplay. The next step is identifying Hydroneer's actual item and interaction actor classes, instead of guessing hooks. On a **disposable single-player world**, press **Ctrl+Alt+F8** while near a loose tool or resource. Pick it up or drop it, then press **Ctrl+Alt+F8** again. UE4SS.log records nearby actor-class counts and differences (`SCAN CLASS`, `SCAN NEW`, `SCAN GONE`). This **does not yet synchronize objects**, and disappearing actors can just have moved outside the 900-unit scan radius. No objects are modified by the scan.
+
+For a cache-resistant installer, retrieve `Install-HydroCoop.ps1` from commit `34ca207bfb4dc647ebf562ff573574a12e5efa2b`; the installer validates v0.11 before overwriting local Lua.
+
 ## v0.10 — Smooth simulated ghost movement (experimental)
 
 The v0.9 ghost movement was verified in-game but visibly teleported between received samples. v0.10 interpolates ghost position and rotation at 20 Hz with a capped movement step. This improves **visual positional motion only**; walking animations, real player input replication, and two-PC gameplay are not yet implemented.
