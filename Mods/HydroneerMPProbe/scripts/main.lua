@@ -1,5 +1,5 @@
--- HydroCoop v0.13: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.13] '
+-- HydroCoop v0.14: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.14] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -447,3 +447,47 @@ LoopAsync(250,function()
   return false
 end)
 log('v0.13 Ctrl+Alt+F6 watches nearest bucket for 30s and writes read-only HC2 packets.')
+
+-- v0.14 remote bucket receiver: validates metadata, never creates/moves actors.
+local remoteBucketPath='Mods/HydroneerMPProbe/remote_bucket_state.txt'
+local remoteBucketSeq={}
+local lastRemoteBucketLine=nil
+local function inspectRemoteBucket()
+  local f=io.open(remoteBucketPath,'r')
+  if not f then log('REMOTE BUCKET: no packet yet');return end
+  local line=f:read('*l')
+  f:close()
+  if not line or #line>240 or line==lastRemoteBucketLine then return end
+  local t={}
+  for token in line:gmatch('[^|]+') do t[#t+1]=token end
+  if #t~=7 or t[1]~='HC2' or not t[3]:match('^[%w_%-]+$') or #t[3]>80 then
+    log('REMOTE BUCKET invalid packet');lastRemoteBucketLine=line;return
+  end
+  if t[4]~='HELD' and t[4]~='GROUND' and t[4]~='MESH' and t[4]~='ATTACHED' then
+    log('REMOTE BUCKET invalid state');lastRemoteBucketLine=line;return
+  end
+  local seq=tonumber(t[2])
+  if not seq or seq<0 or seq>9999999999 or seq%1~=0 then
+    log('REMOTE BUCKET invalid seq');lastRemoteBucketLine=line;return
+  end
+  local p={}
+  for i=5,7 do
+    local n=tonumber(t[i])
+    if not n or n~=n or math.abs(n)>10000000 then
+      log('REMOTE BUCKET invalid position');lastRemoteBucketLine=line;return
+    end
+    p[#p+1]=n
+  end
+  lastRemoteBucketLine=line
+  if remoteBucketSeq[t[3]] and seq<=remoteBucketSeq[t[3]] then
+    log('REMOTE BUCKET stale seq='..seq);return
+  end
+  remoteBucketSeq[t[3]]=seq
+  log(string.format('REMOTE BUCKET ACCEPT seq=%d id=%s state=%s pos=%.1f,%.1f,%.1f',
+    seq,t[3],t[4],p[1],p[2],p[3]))
+end
+RegisterKeyBind(Key.F5,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  local ok,err=pcall(inspectRemoteBucket)
+  if not ok then log('REMOTE BUCKET ERROR '..tostring(err)) end
+end)
+log('v0.14 Ctrl+Alt+F5 validates latest incoming HC2 bucket packet (read-only).')
