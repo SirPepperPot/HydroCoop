@@ -6,7 +6,8 @@ $folder=Join-Path $game 'Mods\HydroneerMPProbe'
 $local=Join-Path $folder 'local_state.txt'
 $remote=Join-Path $folder 'remote_state.txt'
 if (!(Test-Path $folder)) { throw "Install HydroCoop first: $folder" }
-$rx=[System.Net.Sockets.UdpClient]::new([System.Net.IPAddress]::Loopback,49221)
+$listen=[System.Net.IPEndPoint]::new([System.Net.IPAddress]::Loopback,49221)
+$rx=[System.Net.Sockets.UdpClient]::new($listen)
 $tx=[System.Net.Sockets.UdpClient]::new()
 $destination=[System.Net.IPEndPoint]::new([System.Net.IPAddress]::Loopback,49221)
 $sw=[System.Diagnostics.Stopwatch]::StartNew()
