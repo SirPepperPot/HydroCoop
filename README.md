@@ -12,6 +12,18 @@ irm https://raw.githubusercontent.com/SirPepperPot/HydroCoop/main/Install-HydroC
 
 This runs the public repository installer (review its source if desired). It updates the Lua mod, installs HydroCoop-Relay.ps1 in Hydroneer's Win64 folder, and enables the mod automatically. The default game path is `E:\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64`.
 
+## v0.6: Solo localhost test (no friend or VPN)
+
+Update with the existing one-command installer, then open PowerShell in the Hydroneer `Mining\\Binaries\\Win64` directory and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Test-HydroCoop-Local.ps1
+```
+
+The test sends synthetic second-player position messages through UDP loopback `127.0.0.1:49221` for 15 seconds and writes `Mods\\HydroneerMPProbe\\remote_state.txt`. It reports sent/received counts and checks whether the game generated `local_state.txt`.
+
+This proves **local packet transport only**. The simulated character is **not rendered in Hydroneer**, and networking with another PC remains untested. Close any previously running relay using UDP port 49221 before starting the solo test.
+
 ## Two-PC movement transport test
 Both players install UE4SS and HydroCoop; both connect using a private, trusted Tailscale network. Both launch separate single-player sessions in disposable worlds. Open PowerShell in Hydroneer's Win64 folder.
 
