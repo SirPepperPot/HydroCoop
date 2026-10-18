@@ -74,6 +74,7 @@ log('v0.7 remote data readback: Ctrl+Alt+F9')
 -- at an offset from the local player. Ctrl+Alt+F11: destroy only that actor.
 -- Do NOT use on valuable saves. Spawn may invoke Hydroneer's character BeginPlay.
 local ghost=nil
+local movementEnabled=false
 local function spawnGhost()
   if ghost and valid(ghost) then log('GHOST already spawned; use Ctrl+Alt+F11 to remove');return end
   local controllers=FindAllOf('BP_GameController_C')
@@ -122,7 +123,6 @@ log('v0.8 optional ghost spawn Ctrl+Alt+F10; remove Ctrl+Alt+F11. USE DISPOSABLE
 
 -- v0.9: manually enable 20 seconds of ghost-only movement from received file.
 -- Ctrl+Alt+F12, after spawning. Never touches the controlled player.
-local movementEnabled=false
 local moveTicks=0
 local moveErrors=0
 local function readRemoteTransform()
