@@ -1,3 +1,7 @@
+## v0.7 — Incoming movement bridge
+
+After updating with the standard installer, launch a disposable single-player world, run the localhost test, then press **Ctrl+Alt+F9** in Hydroneer. The UE4SS log should contain **REMOTE BRIDGE OK** and the simulated coordinates from `remote_state.txt`. This only parses incoming data; it does not spawn or move characters. Network and game-to-game multiplayer remain unverified.
+
 # HydroCoop
 Experimental two-PC online multiplayer research for Hydroneer (UE4SS, Unreal Engine 4.26).
 
