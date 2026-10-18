@@ -1,5 +1,5 @@
--- HydroCoop v0.12: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.12] '
+-- HydroCoop v0.13: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.13] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -341,3 +341,109 @@ RegisterKeyBind(Key.F7,{ModifierKey.CONTROL,ModifierKey.ALT},function()
   end)
 end)
 log('v0.12 Ctrl+Alt+F7 globally tracks bucket actors, positions and attachment.')
+
+-- v0.13 experimental bucket state packet publisher (read-only).
+-- Ctrl+Alt+F6 selects the nearest bucket within 300 units and watches 30s.
+-- HC2 packets describe the same actor's observed transform and held state.
+local bucketWatch=nil
+local bucketWatchTick=0
+local bucketWatchSeq=0
+local bucketLastState=nil
+local bucketLastPos=nil
+local bucketPackets=0
+local bucketPacketPath='Mods/HydroneerMPProbe/local_bucket_state.txt'
+local function bucketState(a)
+  local pos=a:K2_GetActorLocation()
+  if not pos then return nil end
+  local attachment='none'
+  local parentComponent='none'
+  local root=a.RootComponent
+  if valid(root) and valid(root.AttachParent) then
+    local parent=root.AttachParent
+    local pname=tostring(parent:GetFullName())
+    attachment=string.find(pname,'PlayerHand',1,true) and 'HELD' or
+      (string.find(pname,'CharacterMesh',1,true) and 'MESH' or 'ATTACHED')
+    parentComponent=pname
+  else
+    attachment='GROUND'
+  end
+  return {x=pos.X,y=pos.Y,z=pos.Z,state=attachment,parent=parentComponent}
+end
+local function findPlayer()
+  local controllers=FindAllOf('BP_GameController_C') or {}
+  for _,c in ipairs(controllers) do
+    if valid(c) and valid(c.Pawn) then return c.Pawn end
+  end
+end
+local function startBucketWatch()
+  if bucketWatch then bucketWatch=nil;log('BUCKET WATCH STOPPED');return end
+  local pawn=findPlayer()
+  if not valid(pawn) then log('BUCKET WATCH: player not found');return end
+  local pos=pawn:K2_GetActorLocation()
+  local chosen=nil
+  local best=300*300
+  for _,a in ipairs(FindAllOf('BP_Bucket_C') or {}) do
+    if valid(a) then
+      local ok,p=pcall(function() return a:K2_GetActorLocation() end)
+      if ok and p then
+        local dx=p.X-pos.X
+        local dy=p.Y-pos.Y
+        local dz=p.Z-pos.Z
+        local d=dx*dx+dy*dy+dz*dz
+        if d<best then chosen=a;best=d end
+      end
+    end
+  end
+  if not chosen then log('BUCKET WATCH: no bucket within 300 units');return end
+  bucketWatch=chosen
+  bucketWatchTick=0
+  bucketWatchSeq=0
+  bucketLastState=nil
+  bucketLastPos=nil
+  bucketPackets=0
+  log('BUCKET WATCH START 30s actor='..tostring(chosen:GetFullName()))
+end
+RegisterKeyBind(Key.F6,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(startBucketWatch)
+    if not ok then log('BUCKET WATCH START ERROR '..tostring(err)) end
+  end)
+end)
+LoopAsync(250,function()
+  if bucketWatch then
+    ExecuteInGameThread(function()
+      if not bucketWatch then return end
+      bucketWatchTick=bucketWatchTick+1
+      if bucketWatchTick>120 then bucketWatch=nil;log('BUCKET WATCH STOP: 30s limit');return end
+      if not valid(bucketWatch) then bucketWatch=nil;log('BUCKET WATCH STOP: actor invalid');return end
+      local ok,err=pcall(function()
+        local b=bucketState(bucketWatch)
+        if not b then return end
+        local changed=bucketLastState~=b.state
+        local moved=not bucketLastPos or math.sqrt((b.x-bucketLastPos.x)^2+(b.y-bucketLastPos.y)^2+(b.z-bucketLastPos.z)^2)>35
+        local heartbeat=bucketWatchTick%4==0
+        if changed or moved or heartbeat then
+          bucketWatchSeq=bucketWatchSeq+1
+          local name=tostring(bucketWatch:GetFullName())
+          local id=name:match('([^%.]+)$') or 'bucket'
+          id=id:gsub('[^%w_%-]','_'):sub(1,80)
+          local line=string.format('HC2|%d|%s|%s|%.2f|%.2f|%.2f',bucketWatchSeq,id,b.state,b.x,b.y,b.z)
+          local file,e=io.open(bucketPacketPath,'w')
+          if not file then error(tostring(e)) end
+          file:write(line..'\n')
+          file:close()
+          bucketPackets=bucketPackets+1
+          if changed or bucketPackets%5==0 then
+            log(string.format('BUCKET EVENT seq=%d id=%s state=%s pos=%.1f,%.1f,%.1f parent=%s',
+              bucketWatchSeq,id,b.state,b.x,b.y,b.z,b.parent))
+          end
+          bucketLastState=b.state
+          bucketLastPos={x=b.x,y=b.y,z=b.z}
+        end
+      end)
+      if not ok then log('BUCKET WATCH ERROR '..tostring(err));bucketWatch=nil end
+    end)
+  end
+  return false
+end)
+log('v0.13 Ctrl+Alt+F6 watches nearest bucket for 30s and writes read-only HC2 packets.')
