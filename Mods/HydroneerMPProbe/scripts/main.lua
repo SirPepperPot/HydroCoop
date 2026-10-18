@@ -1,5 +1,5 @@
--- HydroCoop v0.15: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.15] '
+-- HydroCoop v0.16: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.16] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -572,3 +572,76 @@ LoopAsync(50,function()
   return false
 end)
 log('v0.15 Ctrl+Alt+F4 toggles automatic live peer ghost (relay-connected peers only).')
+
+
+-- v0.16: read-only native host/session discovery.
+-- This is NOT a network session or a second playable local pawn.
+-- Capture real in-game world/player structures before choosing a host/join implementation.
+local sessionProbeCount=0
+local function hcSafeName(obj)
+  if not valid(obj) then return 'none' end
+  local ok,value=pcall(function() return obj:GetFullName() end)
+  if ok and value then return tostring(value) end
+  return 'unreadable'
+end
+local function hcSafeField(obj,field)
+  if not valid(obj) then return nil end
+  local ok,value=pcall(function() return obj[field] end)
+  if ok then return value end
+  return nil
+end
+local function hcDescribeClasses(label,className,limit)
+  local ok,actors=pcall(function() return FindAllOf(className) end)
+  if not ok or not actors then log('SESSION '..label..': none or unavailable');return 0 end
+  local n=0
+  for _,a in ipairs(actors) do
+    if valid(a) then
+      n=n+1
+      if n<=limit then log('SESSION '..label..' #'..n..' '..hcSafeName(a)) end
+    end
+  end
+  log('SESSION '..label..' count='..n)
+  return n
+end
+local function probeSession()
+  sessionProbeCount=sessionProbeCount+1
+  log('SESSION PROBE #'..sessionProbeCount..' BEGIN (read-only)')
+  local ctrls=FindAllOf('BP_GameController_C') or {}
+  local n=0
+  for _,c in ipairs(ctrls) do
+    if valid(c) then
+      n=n+1
+      log('SESSION controller #'..n..' '..hcSafeName(c))
+      local pawn=hcSafeField(c,'Pawn')
+      log('SESSION controller #'..n..' pawn='..hcSafeName(pawn))
+      log('SESSION controller #'..n..' playerState='..hcSafeName(hcSafeField(c,'PlayerState')))
+      log('SESSION controller #'..n..' player='..hcSafeName(hcSafeField(c,'Player')))
+      log('SESSION controller #'..n..' netConnection='..hcSafeName(hcSafeField(c,'NetConnection')))
+      if valid(pawn) then
+        local ok,w=pcall(function() return pawn:GetWorld() end)
+        if ok then
+          log('SESSION controller #'..n..' world='..hcSafeName(w))
+          if valid(w) then
+            log('SESSION world authGameMode='..hcSafeName(hcSafeField(w,'AuthorityGameMode')))
+          end
+        end
+      end
+    end
+  end
+  log('SESSION game controllers count='..n)
+  hcDescribeClasses('PlayerController','PlayerController',8)
+  hcDescribeClasses('LocalPlayer','LocalPlayer',8)
+  hcDescribeClasses('GameInstance','GameInstance',4)
+  hcDescribeClasses('GameModeBase','GameModeBase',4)
+  hcDescribeClasses('GameStateBase','GameStateBase',4)
+  hcDescribeClasses('PlayerState','PlayerState',8)
+  hcDescribeClasses('PlayerStart','PlayerStart',8)
+  log('SESSION PROBE #'..sessionProbeCount..' END')
+end
+RegisterKeyBind(Key.F3,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(probeSession)
+    if not ok then log('SESSION PROBE ERROR '..tostring(err)) end
+  end)
+end)
+log('v0.16 native session discovery Ctrl+Alt+F3 (read-only; no host/join yet).')
