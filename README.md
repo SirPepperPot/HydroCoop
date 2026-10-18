@@ -1,3 +1,9 @@
+## v0.10 — Smooth simulated ghost movement (experimental)
+
+The v0.9 ghost movement was verified in-game but visibly teleported between received samples. v0.10 interpolates ghost position and rotation at 20 Hz with a capped movement step. This improves **visual positional motion only**; walking animations, real player input replication, and two-PC gameplay are not yet implemented.
+
+On a disposable single-player world, install the latest mod, press **Ctrl+Alt+F10** to spawn the ghost, start the **30-second** simulator, then press **Ctrl+Alt+F12** while it runs. Ghost following lasts up to 20 seconds. **Ctrl+Alt+F11** removes the ghost. Exit without saving if something unexpected happens.
+
 ## v0.9 — simulated player moves a visible ghost (experimental)
 
 Use a disposable single-player world only. After updating with the usual GitHub installer and launching Hydroneer:
