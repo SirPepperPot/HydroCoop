@@ -1,17 +1,35 @@
 # HydroCoop
-Experimental **two-player-only** online multiplayer research for Hydroneer (Unreal Engine 4.26 / UE4SS). **Not playable online co-op yet.**
+Experimental two-PC online multiplayer research for Hydroneer (UE4SS, Unreal Engine 4.26).
 
-## Current state
-v0.4 is a read-only diagnostic probe. It captures local player controller/pawn positions and rotations once per second for 10 seconds on **Ctrl+Alt+F8**. Network transport, remote-character spawning, shared world state, and proper online multiplayer are **not implemented**.
+**Current status v0.5: NOT playable online co-op.** This build transfers read-only player position and rotation via a private UDP relay. There is no remote character or shared-world synchronization yet.
 
-## One-command update / install (Windows PowerShell)
-Close Hydroneer first. Requires UE4SS already installed in the Hydroneer Win64 folder. This command downloads the installer from this public repository and executes it:
+## Install / update
+Close Hydroneer, ensure UE4SS is installed, and open PowerShell:
+
 ```powershell
 irm https://raw.githubusercontent.com/SirPepperPot/HydroCoop/main/Install-HydroCoop.ps1 | iex
 ```
-**Security:** This executes remote repository code. Review `Install-HydroCoop.ps1` before running if desired. The installer only downloads our Lua file, backs up the previous `main.lua`, copies the file into UE4SS's Mods directory, and adds `enabled.txt`. It assumes Hydroneer is installed at `E:\Steam\steamapps\common\Hydroneer` (edit the installer for another location).
 
-## Uninstall
-Close the game and remove `Mining\Binaries\Win64\Mods\HydroneerMPProbe`. UE4SS itself is not removed.
+This runs the public repository installer (review its source if desired). It updates the Lua mod, installs HydroCoop-Relay.ps1 in Hydroneer's Win64 folder, and enables the mod automatically. The default game path is `E:\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64`.
 
-Test in a disposable world. Earlier experimental player-function hooks disrupted local co-op; v0.4 does not register any gameplay hooks.
+## Two-PC movement transport test
+Both players install UE4SS and HydroCoop; both connect using a private, trusted Tailscale network. Both launch separate single-player sessions in disposable worlds. Open PowerShell in Hydroneer's Win64 folder.
+
+Host:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Host
+```
+
+Friend:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\HydroCoop-Relay.ps1 -Mode Client -HostIP 100.x.x.x
+```
+
+Replace `100.x.x.x` with host's actual Tailscale IPv4. The relay uses UDP port 49221 (Windows firewall may need an inbound rule for trusted network). The relay writes `Mods\HydroneerMPProbe\remote_state.txt` as packets arrive; consoles show sent/received counters. The protocol is not authenticated or encrypted itself; use trusted Tailscale peers, not public port forwarding.
+
+If `local_state.txt` isn't created, check UE4SS.log for `[HydroCoop v0.5]` and Lua errors. Close Hydroneer before upgrading. Press Ctrl+C to exit relay.
+
+To disable this experimental mod, close Hydroneer and delete `Mods\HydroneerMPProbe` (do not delete UE4SS).
+
+## Future work
+Remote player actor spawning and interpolation, interactions, inventory, physics, world persistence, and session lifecycle are not yet implemented.
