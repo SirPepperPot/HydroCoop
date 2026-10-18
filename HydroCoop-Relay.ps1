@@ -1,10 +1,11 @@
-# HydroCoop v0.14 — private trusted-network HC1/HC2 relay, metadata only.
+# HydroCoop v0.15 — private trusted-network HC1/HC2 relay, metadata only.
 param([ValidateSet('Host','Client')][string]$Mode='Host',[string]$HostIP='',[int]$Port=49221)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $MyInvocation.MyCommand.Path
 $folder=Join-Path $root 'Mods\HydroneerMPProbe'
 $local=Join-Path $folder 'local_state.txt'
 $remote=Join-Path $folder 'remote_state.txt'
+$peerState=Join-Path $folder 'peer_state.txt'
 $localBucket=Join-Path $folder 'local_bucket_state.txt'
 $remoteBucket=Join-Path $folder 'remote_bucket_state.txt'
 $bucketPattern='^HC2\|(?<seq>[0-9]{1,10})\|(?<id>[A-Za-z0-9_-]{1,80})\|(?<state>GROUND|HELD|MESH|ATTACHED)\|(?<x>-?[0-9]+(?:\.[0-9]+)?)\|(?<y>-?[0-9]+(?:\.[0-9]+)?)\|(?<z>-?[0-9]+(?:\.[0-9]+)?)$'
@@ -24,6 +25,7 @@ function Test-HC2([string]$packet) {
 }
 if (!(Test-Path $folder)) { throw "Missing mod folder $folder. Run installer first." }
 if ($Mode -eq 'Client' -and !$HostIP) { throw 'Client must specify -HostIP with host private IPv4 address.' }
+Remove-Item -LiteralPath $peerState,$remote -Force -ErrorAction SilentlyContinue
 $udp=[System.Net.Sockets.UdpClient]::new($Port)
 $peer=$null
 if ($Mode -eq 'Client') { $peer=[System.Net.IPEndPoint]::new([System.Net.IPAddress]::Parse($HostIP),$Port) }
@@ -32,7 +34,7 @@ $lastSeq=@{}
 $lastSend=[datetime]::MinValue
 $lastReport=[datetime]::MinValue
 $sent=0; $received=0; $bucketSent=0; $bucketReceived=0; $bucketRejected=0
-Write-Host "HydroCoop v0.14 | $Mode | UDP $Port | Ctrl+C to stop"
+Write-Host "HydroCoop v0.15 | $Mode | UDP $Port | Ctrl+C to stop"
 Write-Host 'Trusted private peers only. Bucket packets update a file; they never modify game actors.'
 try {
  while ($true) {
@@ -55,6 +57,7 @@ try {
        if ($bucketReceived -le 3 -or $bucketReceived%10 -eq 0) { Write-Host "HC2 RX seq=$($bucket.seq) id=$id state=$($bucket.state)" }
      } else {
        [System.IO.File]::WriteAllText($remote,$data+[Environment]::NewLine)
+       [System.IO.File]::WriteAllText($peerState,'ONLINE|'+[DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
        $received++
      }
    }
@@ -89,4 +92,7 @@ try {
    }
    Start-Sleep -Milliseconds 35
  }
-} finally { $udp.Close() }
+} finally {
+ Remove-Item -LiteralPath $peerState -Force -ErrorAction SilentlyContinue
+ $udp.Close()
+}
