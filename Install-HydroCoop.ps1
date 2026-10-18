@@ -17,15 +17,16 @@ try {
   Invoke-WebRequest -Uri "$base/HydroCoop-Relay.ps1?v=$cacheBust" -OutFile $relay -UseBasicParsing
   Invoke-WebRequest -Uri "$base/Test-HydroCoop-Local.ps1?v=$cacheBust" -OutFile $solo -UseBasicParsing
   if ((Get-Item $lua).Length -lt 100 -or (Get-Item $relay).Length -lt 100) { throw 'Download incomplete.' }
+  # Verify the downloaded payload *before* overwriting the existing mod.
   $downloaded = Get-Content -LiteralPath $lua -Raw
-  if ($downloaded -notmatch 'HydroCoop v0\.11' -or $downloaded -notmatch 'Key\.F7') { throw 'Downloaded Lua is not v0.12 or lacks scan hotkey. Existing installation unchanged.' }
+  if ($downloaded -notmatch 'HydroCoop v0\.12' -or $downloaded -notmatch 'Key\.F7') { throw 'Downloaded Lua is not v0.12 or lacks scan hotkey. Existing installation unchanged.' }
   $scripts=Join-Path $mod 'scripts'
   New-Item -ItemType Directory -Force -Path $scripts | Out-Null
   $target=Join-Path $scripts 'main.lua'
   if (Test-Path $target) { Copy-Item $target "$target.bak" -Force }
   Copy-Item $lua $target -Force
   $installed = Get-Content -LiteralPath $target -Raw
-  if ($installed -notmatch 'HydroCoop v0\.11' -or $installed -notmatch 'Key\.F7') { throw 'Installed mod is not v0.12: bucket tracking hotkey missing.' }
+  if ($installed -notmatch 'HydroCoop v0\.12' -or $installed -notmatch 'Key\.F7') { throw 'Installed mod is not v0.12: bucket tracking hotkey missing.' }
   Copy-Item $relay (Join-Path $game 'HydroCoop-Relay.ps1') -Force
   Copy-Item $solo (Join-Path $game 'Test-HydroCoop-Local.ps1') -Force
   New-Item -Path (Join-Path $mod 'enabled.txt') -ItemType File -Force | Out-Null
