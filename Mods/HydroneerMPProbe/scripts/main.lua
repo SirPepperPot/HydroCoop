@@ -1,5 +1,5 @@
--- HydroCoop v0.16: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.16] '
+-- HydroCoop v0.17: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.17] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -645,3 +645,115 @@ RegisterKeyBind(Key.F3,{ModifierKey.CONTROL,ModifierKey.ALT},function()
   end)
 end)
 log('v0.16 native session discovery Ctrl+Alt+F3 (read-only; no host/join yet).')
+
+
+-- v0.17: opt-in host-side control experiment for the REAL local-coop Player 2.
+-- Requires built-in local co-op to have already created two local controllers.
+-- The remote peer still runs a separate client instance for telemetry in this phase.
+-- Does not provide a proper join/session or independent client view yet.
+local nativeRemoteEnabled=false
+local nativeRemotePawn=nil
+local nativeRemoteOrigin=nil
+local nativeHostOrigin=nil
+local nativeTicks=0
+local nativeFailures=0
+local function hcLocalId(ctrl)
+  local player=hcSafeField(ctrl,'Player')
+  if not valid(player) then return nil end
+  local ok,id=pcall(function() return player.ControllerId end)
+  if ok and type(id)=='number' then return id end
+  return nil
+end
+local function hcGetNativeP2()
+  local controllers=FindAllOf('BP_GameController_C') or {}
+  local chosen=nil
+  local total=0
+  for _,ctrl in ipairs(controllers) do
+    if valid(ctrl) and valid(hcSafeField(ctrl,'Pawn')) then
+      total=total+1
+      local id=hcLocalId(ctrl)
+      log('NATIVE candidate '..hcSafeName(ctrl)..' localId='..tostring(id))
+      if id==1 then
+        if chosen then return nil,'multiple controllers claim local ID 1' end
+        chosen=ctrl
+      end
+    end
+  end
+  if total~=2 then return nil,'requires exactly two possessed local co-op players; found '..total end
+  if not chosen then return nil,'cannot identify native Player 2 by LocalPlayer.ControllerId=1 (refusing unsafe guess)' end
+  return hcSafeField(chosen,'Pawn')
+end
+local function hcNativeDisable(why)
+  nativeRemoteEnabled=false
+  nativeRemotePawn=nil
+  nativeRemoteOrigin=nil
+  nativeHostOrigin=nil
+  log('NATIVE P2 OFF: '..tostring(why))
+end
+local function hcNativeToggle()
+  if nativeRemoteEnabled then hcNativeDisable('manually disabled');return end
+  if liveEnabled then log('NATIVE P2 REFUSED: turn ghost mode off with Ctrl+Alt+F4 first');return end
+  if not peerFresh() then log('NATIVE P2 REFUSED: no fresh HC1 network peer');return end
+  local pawn,err=hcGetNativeP2()
+  if not valid(pawn) then log('NATIVE P2 REFUSED: '..tostring(err));return end
+  local remote=readRemoteTransform()
+  if not remote then log('NATIVE P2 REFUSED: no received player position');return end
+  local localPos=pawn:K2_GetActorLocation()
+  if not localPos then log('NATIVE P2 REFUSED: P2 has no position');return end
+  nativeRemotePawn=pawn
+  nativeRemoteOrigin={X=remote.X,Y=remote.Y,Z=remote.Z}
+  nativeHostOrigin={X=localPos.X,Y=localPos.Y,Z=localPos.Z}
+  nativeTicks=0
+  nativeFailures=0
+  nativeRemoteEnabled=true
+  log('NATIVE P2 ON: real local-coop pawn='..hcSafeName(pawn)..' (remote motion re-based at P2 start)')
+end
+RegisterKeyBind(Key.F2,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    local ok,err=pcall(hcNativeToggle)
+    if not ok then hcNativeDisable('toggle error '..tostring(err)) end
+  end)
+end)
+LoopAsync(50,function()
+  if nativeRemoteEnabled then
+    ExecuteInGameThread(function()
+      if not nativeRemoteEnabled then return end
+      if not peerFresh() then hcNativeDisable('peer heartbeat expired');return end
+      if not valid(nativeRemotePawn) then hcNativeDisable('native P2 pawn no longer valid');return end
+      local ok,err=pcall(function()
+        local currentController=hcSafeField(nativeRemotePawn,'Controller')
+        if hcLocalId(currentController)~=1 then hcNativeDisable('native P2 controller changed');return end
+        local remote,rot=readRemoteTransform()
+        if not remote or not rot then return end
+        local pos=nativeRemotePawn:K2_GetActorLocation()
+        if not pos then return end
+        local target={
+          X=nativeHostOrigin.X+(remote.X-nativeRemoteOrigin.X),
+          Y=nativeHostOrigin.Y+(remote.Y-nativeRemoteOrigin.Y),
+          Z=nativeHostOrigin.Z+(remote.Z-nativeRemoteOrigin.Z)
+        }
+        local dx=target.X-pos.X
+        local dy=target.Y-pos.Y
+        local dz=target.Z-pos.Z
+        local distance=math.sqrt(dx*dx+dy*dy+dz*dz)
+        -- Experimental: never warp real player over large distances.
+        if distance>1000 then
+          hcNativeDisable('large positional divergence '..string.format('%.1f',distance));return
+        end
+        local alpha=0.3
+        local factor=distance*alpha>35 and 35/distance or alpha
+        nativeRemotePawn:K2_SetActorLocation({X=pos.X+dx*factor,Y=pos.Y+dy*factor,Z=pos.Z+dz*factor},true,{},false)
+        nativeRemotePawn:K2_SetActorRotation({Pitch=rot.Pitch,Yaw=rot.Yaw,Roll=rot.Roll},false)
+        nativeTicks=nativeTicks+1
+        if nativeTicks%100==0 then log(string.format('NATIVE P2 tick=%d remaining=%.1f deltaFromPeer=%.1f,%.1f,%.1f',nativeTicks,distance,remote.X-nativeRemoteOrigin.X,remote.Y-nativeRemoteOrigin.Y,remote.Z-nativeRemoteOrigin.Z)) end
+      end)
+      if not ok then
+        nativeFailures=nativeFailures+1
+        log('NATIVE P2 ERROR: '..tostring(err))
+        if nativeFailures>=3 then hcNativeDisable('three errors') end
+      end
+    end)
+  end
+  return false
+end)
+log('v0.17 experimental native P2 remote position Ctrl+Alt+F2; requires host local co-op + live peer; disposable save only.')
