@@ -1,5 +1,5 @@
--- HydroCoop v0.17: read-only movement telemetry, no gameplay hooks or actor writes.
-local tag='[HydroCoop v0.17] '
+-- HydroCoop v0.18: read-only movement telemetry, no gameplay hooks or actor writes.
+local tag='[HydroCoop v0.18] '
 local function log(s) print(tag..tostring(s)..'\n') end
 local path='Mods/HydroneerMPProbe/local_state.txt'
 local count=0
@@ -757,3 +757,61 @@ LoopAsync(50,function()
   return false
 end)
 log('v0.17 experimental native P2 remote position Ctrl+Alt+F2; requires host local co-op + live peer; disposable save only.')
+
+
+-- v0.18: programmatically create native local Player 2 (host experiment).
+-- Explicit one-shot, never on a network packet. No controller hardware required.
+-- Does not implement network joining; use a disposable save and exit without saving.
+local hcNativeCreated=false
+local function hcNativeCreateP2()
+  local current=FindAllOf('BP_GameController_C') or {}
+  local count=0
+  local host=nil
+  for _,c in ipairs(current) do
+    if valid(c) and valid(hcSafeField(c,'Pawn')) then count=count+1;host=c end
+  end
+  if count~=1 or not valid(host) then
+    log('CREATE P2 REFUSED: expected exactly one native player, found '..count)
+    return
+  end
+  local function snapshot()
+    local results={}
+    for _,c in ipairs(FindAllOf('BP_GameController_C') or {}) do
+      if valid(c) then results[hcSafeName(c)]=true end
+    end
+    return results
+  end
+  local before=snapshot()
+  local statics=StaticFindObject('/Script/Engine.Default__GameplayStatics')
+  if not valid(statics) then log('CREATE P2 FAILED: GameplayStatics default object not found');return end
+  log('CREATE P2: calling GameplayStatics.CreatePlayer with next available local controller ID')
+  local newController=statics:CreatePlayer(host,-1,true)
+  if not valid(newController) then
+    log('CREATE P2 FAILED: CreatePlayer returned no controller')
+    return
+  end
+  if hcSafeName(newController)==hcSafeName(host) then
+    log('CREATE P2 ERROR: CreatePlayer returned the host controller; refusing to control it')
+    return
+  end
+  if before[hcSafeName(newController)] then
+    log('CREATE P2 ERROR: returned a pre-existing controller')
+    return
+  end
+  hcNativeCreated=true
+  log('CREATE P2 RESULT controller='..hcSafeName(newController))
+  log('CREATE P2 RESULT localPlayer='..hcSafeName(hcSafeField(newController,'Player')))
+  log('CREATE P2 RESULT pawn='..hcSafeName(hcSafeField(newController,'Pawn')))
+  log('CREATE P2 RESULT state='..hcSafeName(hcSafeField(newController,'PlayerState')))
+  log('CREATE P2 RESULT localId='..tostring(hcLocalId(newController)))
+  probeSession()
+  log('CREATE P2: experimental player created. Exit without saving; no automatic removal attempted.')
+end
+RegisterKeyBind(Key.F1,{ModifierKey.CONTROL,ModifierKey.ALT},function()
+  ExecuteInGameThread(function()
+    if hcNativeCreated then log('CREATE P2 REFUSED: already created this session');return end
+    local ok,err=pcall(hcNativeCreateP2)
+    if not ok then log('CREATE P2 ERROR '..tostring(err)) end
+  end)
+end)
+log('v0.18 native P2 creation Ctrl+Alt+F1 (one-shot, disposable single-player save, exit without saving).')
